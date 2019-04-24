@@ -1,0 +1,131 @@
+# The secrets should be base64 encoded
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak
+  namespace: {{ namespace }}
+  labels:
+    app: keycloak
+    layer: auth
+    project: oidcprovider
+data:
+  admin_password: "{{ 'password' | b64encode }}"
+  postgres_password: "{{ 'password' | b64encode }}"
+
+---
+# The secrets should be base64 encoded
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak
+  namespace: {{ namespace }}
+  labels:
+    app: keycloak
+    layer: auth
+    project: oidcprovider
+data:
+  admin_user: "admin"
+  postgres_user: "postgres"
+  postgres_database: "keycloak"
+
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+    layer: auth
+    project: oidcprovider
+  namespace: {{ namespace }}
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: keycloak
+      labels:
+        name: keycloak
+        app: keycloak
+        layer: auth
+        project: oidcprovider
+    spec:
+      containers:
+        - image: jboss/keycloak-postgres
+          name: keycloak
+          imagePullPolicy: Always
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          env:
+            - name: KEYCLOAK_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak
+                  key: admin_user
+            - name: KEYCLOAK_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak
+                  key: admin_password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak
+                  key: postgres_password
+            - name: PROXY_ADDRESS_FORWARDING
+              value: "true"
+            - name: POSTGRES_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak
+                  key: postgres_database
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: keycloak
+                  key: postgres_user
+          ports:
+            - containerPort: 8080
+              name: http
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+    layer: auth
+    project: oidcprovider
+  namespace: {{ namespace }}
+spec:
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+  selector:
+    name: keycloak
+  type: ClusterIP
+
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: keycloak
+  labels:
+    app: keycloak
+    layer: auth
+    project: oidcprovider
+  namespace: {{ namespace }}
+spec:
+  rules:
+  - host: oidcprovider.35.226.212.121.nip.io
+    http:
+      paths:
+      - backend:
+          serviceName: keycloak
+          servicePort: 80

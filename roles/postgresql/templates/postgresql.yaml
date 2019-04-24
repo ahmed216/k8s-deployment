@@ -1,0 +1,119 @@
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: postgres
+#   labels:
+#     name: postgres
+#     app: oidcprovider
+#     layer: database
+#     project: oidcprovider
+# data:
+#   postgres_user: postgres
+#   postgres_database: keycloak
+# ---
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: postgres
+#   labels:
+#     name: postgres
+#     app: oidcprovider
+#     layer: database
+#     project: oidcprovider
+# type: Opaque
+# data:
+#   postgres_password:  {{ 'password' | b64encode }}
+# ---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    name: postgres
+    app: oidcprovider
+    layer: database
+    project: oidcprovider
+spec:
+  template:
+    metadata:
+      name: postgres
+      labels:
+        name: postgres
+        app: oidcprovider
+        layer: database
+        project: oidcprovider
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:9.6.2
+        imagePullPolicy: Always
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+        env:
+        - name: POSTGRES_USER
+          value: postgres
+        - name: PGUSER
+          value: postgres
+        - name: POSTGRES_DB
+          value: keycloak
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_PASSWORD
+          value: password
+        - name: POD_IP
+          valueFrom: { fieldRef: { fieldPath: status.podIP } }
+        ports:
+        - name: postgresql
+          containerPort: 5432
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data/pgdata
+          subPath: postgresql-db
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: postgres
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    name: postgres
+    app: oidcprovider
+    layer: database
+    project: oidcprovider
+spec:
+  type: ClusterIP
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: 5432
+  selector:
+    name: postgres
+
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: postgres
+  labels:
+    name: postgres
+    app: oidcprovider
+    layer: database
+    project: oidcprovider
+  annotations:
+    volume.alpha.kubernetes.io/storage-class: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
